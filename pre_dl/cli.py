@@ -3,14 +3,27 @@ import sys
 import click
 
 
-@click.command()
-def main(args=None):
-    """Console script for pre_dl."""
-    click.echo("Replace this message by putting your code into "
-               "pre_dl.cli.main")
-    click.echo("See click documentation at https://click.palletsprojects.com/")
-    return 0
+@click.group()
+def cli():
+    pass
 
+
+@click.command()
+@click.argument('datetime')
+@click.option('--out', default='out', help='output directory')
+def download_pre(datetime, out):
+    click.echo('Initialized the database')
+
+
+@click.command()
+@click.argument('datetime')
+@click.option('--out', default='out', help='output directory')
+def download_bt(datetime, out):
+    click.echo('Dropped the database')
+
+
+cli.add_command(download_pre)
+cli.add_command(download_bt)
 
 if __name__ == "__main__":
-    sys.exit(main())  # pragma: no cover
+    sys.exit(cli())  # pragma: no cover
