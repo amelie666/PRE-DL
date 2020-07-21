@@ -1,6 +1,8 @@
 import os
 import sys
 import glob
+import calendar
+import datetime
 
 import h5py
 import gdal
@@ -141,6 +143,22 @@ def normalization(x, key):
     return (x - VALID_RANGE.get(key)[0]) / (VALID_RANGE.get(key)[1] - VALID_RANGE.get(key)[0])
 
 
+def cosine_time_radians(time_str, mode):
+    time_obj = datetime.datetime.strptime(time_str, "%Y%m%d%H%M")
+    j_day = int(time_obj.strftime("%j"))
+    j_hour = int(time_obj.hour)
+    j_minute = int(time_obj.minute) // 10
+    total_days = 366 if calendar.isleap(int(time_obj.year)) else 365
+    if "year_time" == mode:
+        time_radians = np.linspace(0, 2*np.pi, total_days*24*6)[(j_day-1)*24*6+(j_hour-1)*6+j_minute]
+    elif "day_time" == mode:
+        time_radians = np.linspace(0, 2*np.pi, 24*6)[(j_hour-1)*6+j_minute]
+    else:
+        raise ValueError("The value of mode must be one of year_time and day_time, not others!")
+
+    return np.cos(time_radians)
+
+
 def parse_func(series):
     x_tmp_lst = list()
     ppre_tmp_lst = list()
@@ -151,12 +169,17 @@ def parse_func(series):
         tmp_data = past_h5_reader.read(b_name)
         x_tmp_lst.extend([normalization(tmp_data, "H8")])
 
-    x_tmp_lst.extend(
-        [
-            normalization(GeoTIFFReader(series["t-10_pre"]).read(), "pre")
-        ]
+    past_pre = GeoTIFFReader(series["t-10_pre"]).read()
+    x_tmp_lst.extend([normalization(past_pre, "pre")])
 
-    )
+    day_time = np.zeros(past_pre.shape)
+    day_time[:, :] = cosine_time_radians(series["t"], "day_time")
+    x_tmp_lst.extend([day_time])
+
+    year_time = np.zeros(past_pre.shape)
+    year_time[:, :] = cosine_time_radians(series["t"], "year_time")
+    x_tmp_lst.extend([year_time])
+
     x_tmp_lst.extend(
         [
             normalization(GeoTIFFReader(series["t-10_loc"]).read(), "loc")
@@ -211,3 +234,8 @@ def data_generator(top_data_dir, batch_size, train_size=0.8):
     train_gen = DataGenerator(train_files, parse_func, batch_size)
     valid_gen = DataGenerator(valid_files, parse_func, batch_size)
     return train_gen, valid_gen
+
+
+if __name__ == '__main__':
+    nn_data_dir = r"/hxqtmp/DPLearning/hm/data/PRE"
+    train_gen, valid_gen = data_generator(nn_data_dir, 16)
