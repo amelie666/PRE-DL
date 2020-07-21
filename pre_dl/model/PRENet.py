@@ -102,5 +102,3 @@ class PRENet(object):
         return model
 
 
-if __name__ == '__main__':
-    PRENet().nn(input_shape=(512, 512, 3), valid_rain=(0, 100))

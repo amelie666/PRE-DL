@@ -211,8 +211,3 @@ def data_generator(top_data_dir, batch_size, train_size=0.8):
     train_gen = DataGenerator(train_files, parse_func, batch_size)
     valid_gen = DataGenerator(valid_files, parse_func, batch_size)
     return train_gen, valid_gen
-
-
-if __name__ == '__main__':
-    nn_data_dir = r"/hxqtmp/DPLearning/hm/data/PRE"
-    train_gen, valid_gen = data_generator(nn_data_dir, 16)
