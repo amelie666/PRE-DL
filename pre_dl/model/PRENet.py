@@ -1,6 +1,11 @@
+import warnings
+warnings.filterwarnings("ignore")
+
+import tensorflow as tf
 from tensorflow.keras import Input
 from tensorflow.keras import Model
 from tensorflow.keras import layers
+from tensorflow.keras import optimizers
 from tensorflow.keras import backend as K
 
 
@@ -57,7 +62,7 @@ class PRENet(object):
         x = layers.Activation('relu')(x)
         return x
 
-    def nn(self, input_shape, valid_rain):
+    def _nn(self, input_shape, valid_rain):
         inputs = Input(shape=input_shape, name='inputs')
 
         x = self._conv2d_bn(inputs, 64, 3, 3)
@@ -93,12 +98,34 @@ class PRENet(object):
         x_p = self._conv2d_bn(x, 128, 3, 3)
         x_val = self._conv2d_bn(x, 128, 3, 3)
         x_p = layers.Conv2D(filters=1, kernel_size=(1, 1), padding='same')(x_p)
-        x_p = layers.Activation('sigmoid', name='x_p')(x_p)
+        x_p = layers.Activation('sigmoid', name='ppre')(x_p)
         x_val = layers.Conv2D(filters=1, kernel_size=(1, 1), padding='same')(x_val)
-        x_val = K.clip(x_val, valid_rain[0], valid_rain[1])
+        x_val = layers.Lambda(lambda lx: K.clip(lx, valid_rain[0], valid_rain[1]), name="pre")(x_val)
 
         model = Model(inputs=inputs, outputs=[x_p, x_val])
         print(model.summary())
         return model
 
+    def compile(self, input_shape, valid_rain, lr, lr_decay):
+        model = self._nn(input_shape, valid_rain)
 
+        delta_bce = K.variable(0.5)
+        delta_mse = K.variable(0.5)
+        last_layer_name = ["ppre", "pre"]
+        for name in last_layer_name:
+            last_layer = model.get_layer(name)
+            if "ppre" == name:
+                loss = (1/delta_bce*tf.reduce_mean(last_layer.output, keepdims=True)+K.log(delta_bce))
+
+            if "pre" == name:
+                loss = (1/delta_mse*tf.reduce_mean(last_layer.output, keepdims=True)+K.log(delta_mse))
+            model.add_loss(loss)
+
+        model.compile(
+            optimizer=optimizers.Adam(lr=lr, decay=lr_decay),
+            loss=[None] * len(model.outputs)
+        )
+
+
+if __name__ == '__main__':
+    PRENet().compile(input_shape=(344, 360, 12), valid_rain=(0, 100), lr=1e-3, lr_decay=1e-4)
