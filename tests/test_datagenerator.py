@@ -10,5 +10,8 @@ class TestDatasets(unittest.TestCase):
         nn_data_dir = r"/hxqtmp/DPLearning/hm/data/PRE"
         train_gen, valid_gen = data_generator(nn_data_dir, 16)
         x,  y = train_gen[0]
-        print(x.shape)
-        print(y['ppre'].shape)
+        for key in x.keys():
+            print(key, x[key].shape)
+        for key in y.keys():
+            print(key, y[key].shape)
+        

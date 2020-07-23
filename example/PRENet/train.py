@@ -26,13 +26,9 @@ warnings.filterwarnings("ignore")
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID";
 os.environ["CUDA_VISIBLE_DEVICES"]="0"; 
 
-def custom_loss():
-    pass
-
-
 def main():
     # 参数
-    bs = 16
+    bs = 2
     end_epoch = 100
     nn_data_dir = r"/hxqtmp/DPLearning/hm/data/PRE"
     # 数据批
@@ -40,17 +36,14 @@ def main():
     np.random.seed(620)
 
     # # 模型准备
-    model = PRENet().nn(input_shape=(512, 512, 3), valid_rain=(0, 100))
-    model.compile(optimizer=optimizers.Adam(lr=0.001, decay=1e-4),
-                  loss=losses.mean_squared_error,
-                  metrics=[metrics.mean_absolute_error])
+    model = PRENet().compile(main_input_shape=(344, 360, 12), gt_ppre_input_shape=(344, 360, 1),gt_pre_input_shape=(344, 360, 1), valid_rain=(0, 100), lr=1e-3, lr_decay=1e-4)
     
     # # 训练模型
     log_dir = './data/round1'
     if not os.path.exists(log_dir):
         os.makedirs(log_dir, exist_ok=True)
     mcp_save_bset = ModelCheckpoint(os.path.join(log_dir, 'cnns_best.h5'), save_best_only=True, monitor='loss', mode='min')
-    mcp_save = ModelCheckpoint(os.path.join(log_dir, 'cnns_{epoch}_{val_mean_absolute_error: .2f}.h5'), period=1)
+    mcp_save = ModelCheckpoint(os.path.join(log_dir, 'cnns_{epoch}.h5'), period=1)
     train_logger = CSVLogger(os.path.join(log_dir, 'train_log.csv'))
     events_dir = os.path.join(log_dir, 'events')
     tensorboard = TensorBoard(

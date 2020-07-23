@@ -131,10 +131,4 @@ class PRENet(object):
             optimizer=optimizers.Adam(lr=lr, decay=lr_decay),
             loss=[None] * len(model.outputs)
         )
-
-
-if __name__ == '__main__':
-    PRENet().compile(
-        main_input_shape=(344, 360, 12), gt_ppre_input_shape=(344, 360, 1),
-        gt_pre_input_shape=(344, 360, 1), valid_rain=(0, 100), lr=1e-3, lr_decay=1e-4
-    )
+        return model
