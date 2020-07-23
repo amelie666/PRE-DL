@@ -105,7 +105,8 @@ class DataGenerator(Sequence):
         batch_pre = np.asarray(pre_lst)
         batch_ppre = np.asarray(ppre_lst)
 
-        return batch_x, {"ppre": batch_ppre, "pre": batch_pre}
+        return {"main_input": batch_x, "gt_ppre": batch_ppre, "gt_pre": batch_pre}, \
+               {"ppre": batch_ppre, "pre": batch_pre}
 
 
 def get_items(file_dir):
@@ -204,10 +205,8 @@ def parse_func(series):
     pre = GeoTIFFReader(series["t_pre"]).read()
     ppre = np.zeros((pre.shape[0], pre.shape[1]))
     pre_tmp_lst.extend([normalization(pre, "pre")])
-    x_tmp_lst.extend([pre])
     ppre[np.where(pre > 0)] = 1
     ppre_tmp_lst.extend([ppre])
-    x_tmp_lst.extend([ppre])
 
     x_arr = np.asarray(x_tmp_lst)
     x_arr = np.transpose(x_arr, [1, 2, 0])
