@@ -3,6 +3,8 @@ import sys
 import glob
 import calendar
 import datetime
+import warnings
+warnings.filterwarnings("ignore")
 
 import h5py
 import gdal
@@ -10,8 +12,6 @@ import numpy as np
 import pandas as pd
 from tensorflow.keras.utils import Sequence
 
-import warnings
-warnings.filterwarnings("ignore")
 
 VALID_RANGE = {
     "H8": [0, 335],
@@ -202,10 +202,12 @@ def parse_func(series):
     )
 
     pre = GeoTIFFReader(series["t_pre"]).read()
-    ppre = np.zeros((2, pre.shape[0], pre.shape[1]))
+    ppre = np.zeros((pre.shape[0], pre.shape[1]))
     pre_tmp_lst.extend([normalization(pre, "pre")])
-    ppre[1, :][np.where(pre > 0)] = 1
-    ppre_tmp_lst.extend(ppre)
+    x_tmp_lst.extend([pre])
+    ppre[np.where(pre > 0)] = 1
+    ppre_tmp_lst.extend([ppre])
+    x_tmp_lst.extend([ppre])
 
     x_arr = np.asarray(x_tmp_lst)
     x_arr = np.transpose(x_arr, [1, 2, 0])
@@ -239,3 +241,6 @@ def data_generator(top_data_dir, batch_size, train_size=0.8):
 if __name__ == '__main__':
     nn_data_dir = r"/hxqtmp/DPLearning/hm/data/PRE"
     train_gen, valid_gen = data_generator(nn_data_dir, 16)
+    for i in train_gen:
+        print(i[0])
+        break
