@@ -4,7 +4,6 @@ import glob
 import calendar
 import datetime
 import warnings
-warnings.filterwarnings("ignore")
 
 import h5py
 import gdal
@@ -12,6 +11,7 @@ import numpy as np
 import pandas as pd
 from tensorflow.keras.utils import Sequence
 
+warnings.filterwarnings("ignore")
 
 VALID_RANGE = {
     "H8": [0, 335],
