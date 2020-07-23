@@ -34,4 +34,4 @@ if __name__ == '__main__':
                         default='.',
                         help='output directory')
     args = parser.parse_args()
-    main()
+    main(args.start_time, args.count, args.out)
