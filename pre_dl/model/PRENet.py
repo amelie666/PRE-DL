@@ -6,7 +6,13 @@ from tensorflow.keras import Input
 from tensorflow.keras import Model
 from tensorflow.keras import layers
 from tensorflow.keras import optimizers
+from tensorflow.keras import losses
 from tensorflow.keras import backend as K
+from tensorflow.python.ops import math_ops
+
+
+class QPELoss(object):
+    pass
 
 
 class PRENet(object):
@@ -62,10 +68,12 @@ class PRENet(object):
         x = layers.Activation('relu')(x)
         return x
 
-    def _nn(self, input_shape, valid_rain):
-        inputs = Input(shape=input_shape, name='inputs')
+    def _nn(self, main_input_shape, gt_ppre_input_shape, gt_pre_input_shape, valid_rain):
+        main_input = Input(shape=main_input_shape, name='main_input')
+        gt_ppre = Input(shape=gt_ppre_input_shape, name='gt_ppre')
+        gt_pre = Input(shape=gt_pre_input_shape, name='gt_pre')
 
-        x = self._conv2d_bn(inputs, 64, 3, 3)
+        x = self._conv2d_bn(main_input, 64, 3, 3)
         x = self._conv2d_bn(x, 64, 3, 3)
         residual_64 = self._residual_module(x, [64, 64])
         x = layers.MaxPooling2D()(x)
@@ -102,24 +110,22 @@ class PRENet(object):
         x_val = layers.Conv2D(filters=1, kernel_size=(1, 1), padding='same')(x_val)
         x_val = layers.Lambda(lambda lx: K.clip(lx, valid_rain[0], valid_rain[1]), name="pre")(x_val)
 
-        model = Model(inputs=inputs, outputs=[x_p, x_val])
+        model = Model(inputs=[main_input, gt_ppre, gt_pre], outputs=[x_p, x_val])
         print(model.summary())
+        self._pre_loss(model, gt_ppre, gt_pre, x_p, x_val)
         return model
 
-    def compile(self, input_shape, valid_rain, lr, lr_decay):
-        model = self._nn(input_shape, valid_rain)
+    def _pre_loss(self, model, gt_ppre, gt_pre, ppre, pre):
 
         delta_bce = K.variable(0.5)
         delta_mse = K.variable(0.5)
-        last_layer_name = ["ppre", "pre"]
-        for name in last_layer_name:
-            last_layer = model.get_layer(name)
-            if "ppre" == name:
-                loss = (1/delta_bce*tf.reduce_mean(last_layer.output, keepdims=True)+K.log(delta_bce))
+        loss = 1/delta_bce*K.binary_crossentropy(gt_ppre, ppre)+K.log(delta_bce)
+        loss += 1/delta_mse*K.mean(math_ops.squared_difference(pre, gt_pre), axis=-1, keepdims=True)+K.log(delta_mse)
 
-            if "pre" == name:
-                loss = (1/delta_mse*tf.reduce_mean(last_layer.output, keepdims=True)+K.log(delta_mse))
-            model.add_loss(loss)
+        model.add_loss(loss)
+
+    def compile(self, main_input_shape, gt_ppre_input_shape, gt_pre_input_shape, valid_rain, lr, lr_decay):
+        model = self._nn(main_input_shape, gt_ppre_input_shape, gt_pre_input_shape, valid_rain)
 
         model.compile(
             optimizer=optimizers.Adam(lr=lr, decay=lr_decay),
@@ -128,4 +134,7 @@ class PRENet(object):
 
 
 if __name__ == '__main__':
-    PRENet().compile(input_shape=(344, 360, 12), valid_rain=(0, 100), lr=1e-3, lr_decay=1e-4)
+    PRENet().compile(
+        main_input_shape=(344, 360, 12), gt_ppre_input_shape=(344, 360, 1),
+        gt_pre_input_shape=(344, 360, 1), valid_rain=(0, 100), lr=1e-3, lr_decay=1e-4
+    )
