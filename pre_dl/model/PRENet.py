@@ -1,18 +1,15 @@
 import warnings
 warnings.filterwarnings("ignore")
 
+import numpy as np
 import tensorflow as tf
 from tensorflow.keras import Input
 from tensorflow.keras import Model
 from tensorflow.keras import layers
+from tensorflow.keras import metrics
 from tensorflow.keras import optimizers
-from tensorflow.keras import losses
 from tensorflow.keras import backend as K
 from tensorflow.python.ops import math_ops
-
-
-class QPELoss(object):
-    pass
 
 
 class PRENet(object):
@@ -69,6 +66,7 @@ class PRENet(object):
         return x
 
     def _nn(self, main_input_shape, gt_ppre_input_shape, gt_pre_input_shape, valid_rain):
+        valid_rain = np.asarray(valid_rain).astype(np.float32)
         main_input = Input(shape=main_input_shape, name='main_input')
         gt_ppre = Input(shape=gt_ppre_input_shape, name='gt_ppre')
         gt_pre = Input(shape=gt_pre_input_shape, name='gt_pre')
@@ -109,26 +107,59 @@ class PRENet(object):
         x_p = layers.Activation('sigmoid', name='ppre')(x_p)
         x_val = layers.Conv2D(filters=1, kernel_size=(1, 1), padding='same')(x_val)
         x_val = layers.Lambda(lambda lx: K.clip(lx, valid_rain[0], valid_rain[1]), name="pre")(x_val)
+        bce_loss = layers.Lambda(lambda lx: K.binary_crossentropy(*lx), name="bce_loss")(
+            [gt_ppre, x_p])
+        mse_loss = layers.Lambda(lambda lx: K.mean(math_ops.squared_difference(*lx), axis=-1, keepdims=True), name="mse_loss")(
+            [gt_pre, x_val])
 
-        model = Model(inputs=[main_input, gt_ppre, gt_pre], outputs=[x_p, x_val])
+        # acc = layers.Lambda(lambda lx: metrics.binary_accuracy(*lx), name="acc")(
+        #     [gt_ppre, x_p])
+        mae = layers.Lambda(lambda lx: metrics.mean_absolute_error(*lx) / (valid_rain[1] - valid_rain[0]), name="mae")(
+            [gt_pre, x_val])
+
+        model = Model(inputs=[main_input, gt_ppre, gt_pre], outputs=[x_p, x_val, bce_loss, mse_loss, mae])
+        # model = Model(inputs=[main_input], outputs=[x_p, x_val])
         print(model.summary())
-        self._pre_loss(model, gt_ppre, gt_pre, x_p, x_val)
+
         return model
-
-    def _pre_loss(self, model, gt_ppre, gt_pre, ppre, pre):
-
-        delta_bce = K.variable(0.5)
-        delta_mse = K.variable(0.5)
-        loss = 1/delta_bce*K.binary_crossentropy(gt_ppre, ppre)+K.log(delta_bce)
-        loss += 1/delta_mse*K.mean(math_ops.squared_difference(pre, gt_pre), axis=-1, keepdims=True)+K.log(delta_mse)
-
-        model.add_loss(loss)
 
     def compile(self, main_input_shape, gt_ppre_input_shape, gt_pre_input_shape, valid_rain, lr, lr_decay):
         model = self._nn(main_input_shape, gt_ppre_input_shape, gt_pre_input_shape, valid_rain)
+
+        loss_name = ["bce_loss", "mse_loss"]
+        for name in loss_name:
+            loss_layer = model.get_layer(name)
+            model.add_loss((tf.reduce_mean(loss_layer.output, keepdims=True)*0.5))
+
+        metric_name = ["mae"]
+        for name in metric_name:
+            metric_layer = model.get_layer(name)
+            model.add_metric((tf.reduce_mean(metric_layer.output, keepdims=True)*0.5), aggregation="mean", name="QPE_MAE")
 
         model.compile(
             optimizer=optimizers.Adam(lr=lr, decay=lr_decay),
             loss=[None] * len(model.outputs)
         )
+
+        # model.compile(
+        #     optimizer=optimizers.Adam(lr=lr, decay=lr_decay),
+        #     loss={"ppre": losses.binary_crossentropy,
+        #           "pre": losses.mean_squared_error},
+        #     metrics={
+        #         "ppre": metrics.binary_accuracy,
+        #         "pre": metrics.mean_absolute_error
+        #     },
+        #     loss_weights=[0.5, 0.5]
+        # )
         return model
+
+
+if __name__ == '__main__':
+    import os
+    # The GPU id to use, usually either "0" or "1";
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    PRENet().compile(
+        main_input_shape=(344, 360, 12), gt_ppre_input_shape=(344, 360, 1),
+        gt_pre_input_shape=(344, 360, 1), valid_rain=(0., 100.), lr=1e-3, lr_decay=1e-4
+    )
