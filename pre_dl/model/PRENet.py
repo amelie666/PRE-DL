@@ -6,12 +6,9 @@ import tensorflow as tf
 from tensorflow.keras import Input
 from tensorflow.keras import Model
 from tensorflow.keras import layers
-from tensorflow.keras import losses
-from tensorflow.keras import metrics
 from tensorflow.keras import initializers
 from tensorflow.keras import optimizers
 from tensorflow.keras import backend as K
-from tensorflow.python.ops import math_ops
 
 
 class QPELoss(layers.Layer):
@@ -35,8 +32,6 @@ class QPELoss(layers.Layer):
                                          shape=(1, ),
                                          initializer=initializers.constant(1.),
                                          trainable=True)
-        print(K.eval(self.delta_mse))
-        # initializers.constant(1)
 
         super(QPELoss, self).build(input_shape)  # 一定要在最后调用它
 
@@ -47,10 +42,9 @@ class QPELoss(layers.Layer):
         loss = K.mean(K.binary_crossentropy(a, b))/K.square(self.delta_bce)+K.abs(K.log(self.delta_bce))
         loss += K.mean(K.square(c - d))/(2*K.square(self.delta_mse))+K.abs(K.log(self.delta_mse))
 
-        self.add_loss(loss, inputs=True)
-        # self.add_metric(loss, aggregation="mean", name="qpe_loss")
+        self.add_loss(tf.reduce_mean(loss))
 
-        return loss
+        return tf.reduce_mean(loss)
 
     def compute_output_shape(self, input_shape):
         assert isinstance(input_shape, list)
@@ -111,7 +105,7 @@ class PRENet(object):
         x = layers.Activation('relu')(x)
         return x
 
-    def _nn(self, main_input_shape, gt_ppre_input_shape, gt_pre_input_shape, valid_rain):
+    def _build(self, main_input_shape, gt_ppre_input_shape, gt_pre_input_shape, valid_rain):
         valid_rain = np.asarray(valid_rain).astype(np.float32)
         main_input = Input(shape=main_input_shape, name='main_input')
         gt_ppre = Input(shape=gt_ppre_input_shape, name='gt_ppre')
@@ -163,22 +157,17 @@ class PRENet(object):
             ]
         )
 
-        model = Model(inputs=[main_input, gt_ppre, gt_pre], outputs=[x_p, x_val, qpe_loss])
+        model = Model(inputs=[main_input, gt_ppre, gt_pre], outputs=[x_p, x_val, qpe_loss], name="AI-QPE")
         print(model.summary())
 
         return model
 
     def compile(self, main_input_shape, gt_ppre_input_shape, gt_pre_input_shape, valid_rain, lr, lr_decay):
-        model = self._nn(main_input_shape, gt_ppre_input_shape, gt_pre_input_shape, valid_rain)
+        model = self._build(main_input_shape, gt_ppre_input_shape, gt_pre_input_shape, valid_rain)
 
         model.compile(
             optimizer=optimizers.Adam(lr=lr, decay=lr_decay),
-            loss=[None] * len(model.outputs),
-            metrics={
-                "ppre": metrics.binary_accuracy,
-                "pre": metrics.mean_absolute_error,
-                # "qpe_loss": None
-            },
+            loss=[None] * len(model.outputs)
         )
 
         # model.compile(
@@ -192,3 +181,14 @@ class PRENet(object):
         #     loss_weights=[0.5, 0.5]
         # )
         return model
+
+
+if __name__ == '__main__':
+    import os
+    # The GPU id to use, usually either "0" or "1";
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    PRENet().compile(
+        main_input_shape=(344, 360, 12), gt_ppre_input_shape=(344, 360, 1),
+        gt_pre_input_shape=(344, 360, 1), valid_rain=(0., 100.), lr=1e-3, lr_decay=1e-4
+    )
