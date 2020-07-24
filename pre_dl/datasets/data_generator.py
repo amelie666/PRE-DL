@@ -93,6 +93,13 @@ class DataGenerator(Sequence):
     def __len__(self):
         return int(np.floor(len(self.files_df) / self.batch_size))
 
+    def get_time(self, index):
+        batch_indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
+        times_list = []
+        for idx in batch_indexes:
+            times_list.append(self.files_df.iloc[idx, :][0])
+        return times_list
+
     def __getitem__(self, index):
         batch_indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
         x_lst, pre_lst, ppre_lst = list(), list(), list()
@@ -236,10 +243,3 @@ def data_generator(top_data_dir, batch_size, train_size=0.8):
     valid_gen = DataGenerator(valid_files, parse_func, batch_size)
     return train_gen, valid_gen
 
-
-if __name__ == '__main__':
-    nn_data_dir = r"/hxqtmp/DPLearning/hm/data/PRE"
-    train_gen, valid_gen = data_generator(nn_data_dir, 16)
-    for i in train_gen:
-        print(i[0])
-        break
