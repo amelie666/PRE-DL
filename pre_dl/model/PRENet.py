@@ -181,14 +181,3 @@ class PRENet(object):
         #     loss_weights=[0.5, 0.5]
         # )
         return model
-
-
-if __name__ == '__main__':
-    import os
-    # The GPU id to use, usually either "0" or "1";
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-    PRENet().compile(
-        main_input_shape=(344, 360, 12), gt_ppre_input_shape=(344, 360, 1),
-        gt_pre_input_shape=(344, 360, 1), valid_rain=(0., 100.), lr=1e-3, lr_decay=1e-4
-    )
