@@ -21,6 +21,11 @@ VALID_RANGE = {
 }
 
 H8_BANDS = ["EVB0860", "EVB1040", "EVB1230"]
+RG_BANDS = ["V13392_010", ]
+
+STUDY_AREA_SHAPE = [344, 360]
+
+WINDOW_SIZE = 32
 
 
 class H5BasicReader(object):
@@ -95,7 +100,7 @@ class DataGenerator(Sequence):
 
     def get_time(self, index):
         batch_indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
-        times_list = []
+        times_list = list()
         for idx in batch_indexes:
             times_list.append(self.files_df.iloc[idx, :][0])
         return times_list
@@ -119,7 +124,8 @@ class DataGenerator(Sequence):
 def get_items(file_dir):
     df = pd.DataFrame(
         columns=[
-            "t", "t-10_H8", "t-10_pre", "t-10_loc", "t_H8", "t_loc", "t_dem", "t_pre"
+            "t", "t-10_H8", "t-10_pre", "t-10_loc", "t_H8", "t_dem",
+            "t_loc", "t_pre", "start_row", "end_row", "start_col", "end_col"
         ]
     )
 
@@ -127,20 +133,41 @@ def get_items(file_dir):
         yyyymmdd, hhmm = os.path.basename(f).split("_")[2:4]
         next_ten_h8 = os.path.join(file_dir, "H8", "Himawari8_OBI_{}_{}_PRJ3.HDF".format(yyyymmdd, int(hhmm)+10))
         if os.path.exists(next_ten_h8):
-            new_df = pd.DataFrame(
-                {
-                    "t": yyyymmdd+str(int(hhmm)+10),
-                    "t-10_H8": f,
-                    "t-10_pre": os.path.join(file_dir, "Pre", "{}_Pre.tif".format(yyyymmdd+hhmm)),
-                    "t-10_loc": os.path.join(file_dir, "Location", "{}_Location.tif".format(yyyymmdd + hhmm)),
-                    "t_H8": next_ten_h8,
-                    "t_loc": os.path.join(file_dir, "Location", "{}_Location.tif".format(yyyymmdd + str(int(hhmm)+10))),
-                    "t_dem": os.path.join(file_dir, "DEM", "DEM_H8.tif"),
-                    "t_pre": os.path.join(file_dir, "Pre", "{}_Pre.tif".format(yyyymmdd+str(int(hhmm)+10)))
-                },
-                index=[0]
-            )
-            df = pd.concat([df, new_df])
+            t_rg = os.path.join(file_dir, "RG", "{}.csv".format(yyyymmdd + str(int(hhmm)+10)))
+            rg_df = pd.read_csv(t_rg)
+            rain_df = rg_df[rg_df["V13392_010"] > 0]
+            gauges_num = rain_df.index.values.shape[0]
+            no_rain_df = rg_df[rg_df["V13392_010"] == 0].sample(gauges_num, random_state=np.random.seed(42))
+            target_df = pd.concat([rain_df, no_rain_df])
+
+            for row in target_df.itertuples():
+                col = getattr(row, "v_i")
+                row = getattr(row, "u_i")
+
+                if (row - int(WINDOW_SIZE/2)) < 0 or (col - int(WINDOW_SIZE/2)) < 0:
+                    continue
+
+                if (row + int(WINDOW_SIZE/2)) > STUDY_AREA_SHAPE[0] or (col + int(WINDOW_SIZE/2)) > STUDY_AREA_SHAPE[1]:
+                    continue
+
+                new_df = pd.DataFrame(
+                    {
+                        "t": yyyymmdd+str(int(hhmm)+10),
+                        "t-10_H8": f,
+                        "t-10_pre": os.path.join(file_dir, "Pre", "{}_Pre.tif".format(yyyymmdd+hhmm)),
+                        "t-10_loc": os.path.join(file_dir, "Location", "{}_Location.tif".format(yyyymmdd + hhmm)),
+                        "t_H8": next_ten_h8,
+                        "t_loc": os.path.join(file_dir, "Location", "{}_Location.tif".format(yyyymmdd + str(int(hhmm)+10))),
+                        "t_dem": os.path.join(file_dir, "DEM", "DEM_H8.tif"),
+                        "t_pre": os.path.join(file_dir, "Pre", "{}_Pre.tif".format(yyyymmdd+str(int(hhmm)+10))),
+                        "start_row": row - int(WINDOW_SIZE/2),
+                        "end_row": row + int(WINDOW_SIZE/2),
+                        "start_col": col - int(WINDOW_SIZE/2),
+                        "end_col": col + int(WINDOW_SIZE/2)
+                    },
+                    index=[0]
+                )
+                df = pd.concat([df, new_df])
         else:
             continue
 
@@ -172,12 +199,17 @@ def parse_func(series):
     ppre_tmp_lst = list()
     pre_tmp_lst = list()
 
+    start_row = series["start_row"]
+    end_row = series["end_row"]
+    start_col = series["start_col"]
+    end_col = series["end_col"]
+
     past_h5_reader = H5BasicReader(series["t-10_H8"])
     for b_name in H8_BANDS:
-        tmp_data = past_h5_reader.read(b_name)
+        tmp_data = past_h5_reader.read(b_name)[start_row:end_row, start_col:end_col]
         x_tmp_lst.extend([normalization(tmp_data, "H8")])
 
-    past_pre = GeoTIFFReader(series["t-10_pre"]).read()
+    past_pre = GeoTIFFReader(series["t-10_pre"]).read()[start_row:end_row, start_col:end_col]
     x_tmp_lst.extend([normalization(past_pre, "pre")])
 
     day_time = np.zeros(past_pre.shape)
@@ -190,26 +222,22 @@ def parse_func(series):
 
     x_tmp_lst.extend(
         [
-            normalization(GeoTIFFReader(series["t-10_loc"]).read(), "loc")
+            normalization(GeoTIFFReader(series["t-10_loc"]).read()[start_row:end_row, start_col:end_col], "loc")
         ]
     )
 
     cur_h5_reader = H5BasicReader(series["t_H8"])
     for b_name in H8_BANDS:
-        tmp_data = cur_h5_reader.read(b_name)
+        tmp_data = cur_h5_reader.read(b_name)[start_row:end_row, start_col:end_col]
         x_tmp_lst.extend([normalization(tmp_data, "H8")])
+
     x_tmp_lst.extend(
         [
-            normalization(GeoTIFFReader(series["t_loc"]).read(), "loc")
-        ]
-    )
-    x_tmp_lst.extend(
-        [
-            normalization(GeoTIFFReader(series["t_dem"]).read(), "dem")
+            normalization(GeoTIFFReader(series["t_dem"]).read()[start_row:end_row, start_col:end_col], "dem")
         ]
     )
 
-    pre = GeoTIFFReader(series["t_pre"]).read()
+    pre = GeoTIFFReader(series["t_pre"]).read()[start_row:end_row, start_col:end_col]
     ppre = np.zeros((pre.shape[0], pre.shape[1]))
     pre_tmp_lst.extend([normalization(pre, "pre")])
     ppre[np.where(pre > 0)] = 1
@@ -225,21 +253,35 @@ def parse_func(series):
     return x_arr, pre_arr, ppre_arr
 
 
-def train_test_split(top_data_dir, train_size=0.8):
-    files_df = get_items(top_data_dir)
-    train_lens = int(np.ceil(len(files_df) * train_size))
-    valid_lens = int(np.ceil((len(files_df) - train_lens) / 2))
+def train_test_split(files_df_path, top_data_dir, train_size=0.8):
+    if os.path.exists(files_df_path):
+        files_df = pd.read_csv(files_df_path)
+    else:
+        files_df = get_items(top_data_dir)
 
-    train_files_df = files_df.iloc[:train_lens, :]
-    valid_files_df = files_df.iloc[train_lens:train_lens+valid_lens, :]
-    test_files_df = files_df.iloc[train_lens + valid_lens:, :]
+    unique_time = files_df["t"].unique()
+    lens = len(unique_time)
+    train_lens = int(np.ceil(lens * train_size))
+    valid_lens = int(np.ceil((lens - train_lens) / 2))
+
+    train_time = unique_time[:train_lens]
+    valid_time = unique_time[train_lens:train_lens+valid_lens]
+    test_time = unique_time[train_lens + valid_lens:]
+
+    train_files_df = files_df[files_df["t"].isin(train_time)]
+    valid_files_df = files_df[files_df["t"].isin(valid_time)]
+    test_files_df = files_df[files_df["t"].isin(test_time)]
 
     return train_files_df, valid_files_df, test_files_df
 
 
-def data_generator(top_data_dir, batch_size, train_size=0.8):
-    train_files, valid_files, _ = train_test_split(top_data_dir, train_size)
+def data_generator(files_df_path, top_data_dir, batch_size, train_size=0.8, train=True):
+    train_files, valid_files, test_files = train_test_split(files_df_path, top_data_dir, train_size)
     train_gen = DataGenerator(train_files, parse_func, batch_size)
     valid_gen = DataGenerator(valid_files, parse_func, batch_size)
-    return train_gen, valid_gen
+    test_gen = DataGenerator(test_files, parse_func, batch_size)
 
+    if train:
+        return train_gen, valid_gen
+    else:
+        return test_gen
