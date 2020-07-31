@@ -179,7 +179,7 @@ def normalization(x, key):
 
 
 def cosine_time_radians(time_str, mode):
-    time_obj = datetime.datetime.strptime(time_str, "%Y%m%d%H%M")
+    time_obj = datetime.datetime.strptime(str(time_str), "%Y%m%d%H%M")
     j_day = int(time_obj.strftime("%j"))
     j_hour = int(time_obj.hour)
     j_minute = int(time_obj.minute) // 10
