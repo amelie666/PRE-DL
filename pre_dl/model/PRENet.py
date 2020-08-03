@@ -13,7 +13,7 @@ from tensorflow.keras import backend as K
 
 class QPELoss(layers.Layer):
 
-    def __init__(self, output_dim, **kwargs):
+    def __init__(self, output_dim=1, **kwargs):
         self.output_dim = output_dim
         super(QPELoss, self).__init__(**kwargs)
 
@@ -44,7 +44,7 @@ class QPELoss(layers.Layer):
 
         self.add_loss(tf.reduce_mean(loss))
 
-        return tf.reduce_mean(loss)
+        return tf.reduce_mean(loss, keepdims=True)
 
     def compute_output_shape(self, input_shape):
         assert isinstance(input_shape, list)
