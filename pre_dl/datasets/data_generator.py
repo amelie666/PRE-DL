@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 from tensorflow.keras.utils import Sequence
 
+
 VALID_RANGE = {
     "H8": [0, 335],
     "loc": [0, 1],
@@ -66,11 +67,13 @@ class GeoTIFFReader(object):
         self.ProjectionInfo = dataset.GetProjection()
 
     def read(self, ):
+
         dataset = gdal.Open(self.in_file)
         data = dataset.ReadAsArray(0, 0, self.XSize, self.YSize)
         return data
 
     def get_lon_lat(self, ):
+
         gtf = self.GeoTransform
         x_range = range(0, self.XSize)
         y_range = range(0, self.YSize)
@@ -102,14 +105,14 @@ class DataGenerator(Sequence):
         for idx in batch_indexes:
             times_list.append(self.files_df.loc[idx, 't'])
         return times_list
-    
+
     def get_row(self, index):
         batch_indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
         row_list = list()
         for idx in batch_indexes:
             row_list.append(self.files_df.loc[idx, ['start_row','end_row']])
         return row_list
-    
+
     def get_col(self, index):
         batch_indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
         col_list = list()
@@ -193,7 +196,6 @@ def normalization(x, key):
 
 
 def cosine_time_radians(time_str, mode):
-    time_str = str(time_str)
     time_obj = datetime.datetime.strptime(str(time_str), "%Y%m%d%H%M")
     j_day = int(time_obj.strftime("%j"))
     j_hour = int(time_obj.hour)
