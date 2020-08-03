@@ -4,6 +4,7 @@ import glob
 import calendar
 import datetime
 import warnings
+
 warnings.filterwarnings("ignore")
 
 import h5py
@@ -102,8 +103,22 @@ class DataGenerator(Sequence):
         batch_indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
         times_list = list()
         for idx in batch_indexes:
-            times_list.append(self.files_df.iloc[idx, :][0])
+            times_list.append(self.files_df.loc[idx, 't'])
         return times_list
+
+    def get_row(self, index):
+        batch_indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
+        row_list = list()
+        for idx in batch_indexes:
+            row_list.append(self.files_df.loc[idx, ['start_row','end_row']])
+        return row_list
+
+    def get_col(self, index):
+        batch_indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
+        col_list = list()
+        for idx in batch_indexes:
+            col_list.append(self.files_df.loc[idx, ['start_col','end_col']])
+        return col_list
 
     def __getitem__(self, index):
         batch_indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
@@ -131,9 +146,9 @@ def get_items(file_dir):
 
     for f in sorted(glob.glob(os.path.join(file_dir, "H8", "*.HDF"))):
         yyyymmdd, hhmm = os.path.basename(f).split("_")[2:4]
-        next_ten_h8 = os.path.join(file_dir, "H8", "Himawari8_OBI_{}_{}_PRJ3.HDF".format(yyyymmdd, int(hhmm)+10))
+        next_ten_h8 = os.path.join(file_dir, "H8", "Himawari8_OBI_{}_{}_PRJ3.HDF".format(yyyymmdd, int(hhmm) + 10))
         if os.path.exists(next_ten_h8):
-            t_rg = os.path.join(file_dir, "RG", "{}.csv".format(yyyymmdd + str(int(hhmm)+10)))
+            t_rg = os.path.join(file_dir, "RG", "{}.csv".format(yyyymmdd + str(int(hhmm) + 10)))
             rg_df = pd.read_csv(t_rg)
             rain_df = rg_df[rg_df["V13392_010"] > 0]
             gauges_num = rain_df.index.values.shape[0]
@@ -144,26 +159,28 @@ def get_items(file_dir):
                 col = getattr(row, "v_i")
                 row = getattr(row, "u_i")
 
-                if (row - int(WINDOW_SIZE/2)) < 0 or (col - int(WINDOW_SIZE/2)) < 0:
+                if (row - int(WINDOW_SIZE / 2)) < 0 or (col - int(WINDOW_SIZE / 2)) < 0:
                     continue
 
-                if (row + int(WINDOW_SIZE/2)) > STUDY_AREA_SHAPE[0] or (col + int(WINDOW_SIZE/2)) > STUDY_AREA_SHAPE[1]:
+                if (row + int(WINDOW_SIZE / 2)) > STUDY_AREA_SHAPE[0] or (col + int(WINDOW_SIZE / 2)) > \
+                    STUDY_AREA_SHAPE[1]:
                     continue
 
                 new_df = pd.DataFrame(
                     {
-                        "t": yyyymmdd+str(int(hhmm)+10),
+                        "t": yyyymmdd + str(int(hhmm) + 10),
                         "t-10_H8": f,
-                        "t-10_pre": os.path.join(file_dir, "Pre", "{}_Pre.tif".format(yyyymmdd+hhmm)),
+                        "t-10_pre": os.path.join(file_dir, "Pre", "{}_Pre.tif".format(yyyymmdd + hhmm)),
                         "t-10_loc": os.path.join(file_dir, "Location", "{}_Location.tif".format(yyyymmdd + hhmm)),
                         "t_H8": next_ten_h8,
-                        "t_loc": os.path.join(file_dir, "Location", "{}_Location.tif".format(yyyymmdd + str(int(hhmm)+10))),
+                        "t_loc": os.path.join(file_dir, "Location",
+                                              "{}_Location.tif".format(yyyymmdd + str(int(hhmm) + 10))),
                         "t_dem": os.path.join(file_dir, "DEM", "DEM_H8.tif"),
-                        "t_pre": os.path.join(file_dir, "Pre", "{}_Pre.tif".format(yyyymmdd+str(int(hhmm)+10))),
-                        "start_row": row - int(WINDOW_SIZE/2),
-                        "end_row": row + int(WINDOW_SIZE/2),
-                        "start_col": col - int(WINDOW_SIZE/2),
-                        "end_col": col + int(WINDOW_SIZE/2)
+                        "t_pre": os.path.join(file_dir, "Pre", "{}_Pre.tif".format(yyyymmdd + str(int(hhmm) + 10))),
+                        "start_row": row - int(WINDOW_SIZE / 2),
+                        "end_row": row + int(WINDOW_SIZE / 2),
+                        "start_col": col - int(WINDOW_SIZE / 2),
+                        "end_col": col + int(WINDOW_SIZE / 2)
                     },
                     index=[0]
                 )
@@ -185,9 +202,10 @@ def cosine_time_radians(time_str, mode):
     j_minute = int(time_obj.minute) // 10
     total_days = 366 if calendar.isleap(int(time_obj.year)) else 365
     if "year_time" == mode:
-        time_radians = np.linspace(0, 2*np.pi, total_days*24*6)[(j_day-1)*24*6+(j_hour-1)*6+j_minute]
+        time_radians = np.linspace(0, 2 * np.pi, total_days * 24 * 6)[
+            (j_day - 1) * 24 * 6 + (j_hour - 1) * 6 + j_minute]
     elif "day_time" == mode:
-        time_radians = np.linspace(0, 2*np.pi, 24*6)[(j_hour-1)*6+j_minute]
+        time_radians = np.linspace(0, 2 * np.pi, 24 * 6)[(j_hour - 1) * 6 + j_minute]
     else:
         raise ValueError("The value of mode must be one of year_time and day_time, not others!")
 
@@ -265,23 +283,51 @@ def train_test_split(files_df_path, top_data_dir, train_size=0.8):
     valid_lens = int(np.ceil((lens - train_lens) / 2))
 
     train_time = unique_time[:train_lens]
-    valid_time = unique_time[train_lens:train_lens+valid_lens]
+    valid_time = unique_time[train_lens:train_lens + valid_lens]
     test_time = unique_time[train_lens + valid_lens:]
 
     train_files_df = files_df[files_df["t"].isin(train_time)]
     valid_files_df = files_df[files_df["t"].isin(valid_time)]
     test_files_df = files_df[files_df["t"].isin(test_time)]
 
+    test_files_df = convert_test_df_for_demo(test_files_df)
+
     return train_files_df, valid_files_df, test_files_df
+
+
+def convert_test_df_for_demo(test_files_df):
+    p_step = (32, 32)
+    unique_time = test_files_df["t"].unique()
+    tdf = pd.DataFrame(
+        columns=[
+            "t", "t-10_H8", "t-10_pre", "t-10_loc", "t_H8", "t_dem",
+            "t_loc", "t_pre", "start_row", "end_row", "start_col", "end_col"
+        ]
+    )
+
+    r = np.arange(0, STUDY_AREA_SHAPE[0], WINDOW_SIZE)
+    r = np.clip(r, 0, STUDY_AREA_SHAPE[0] - WINDOW_SIZE)
+    c = np.arange(0, STUDY_AREA_SHAPE[1], WINDOW_SIZE)
+    c = np.clip(c, 0, STUDY_AREA_SHAPE[1] - WINDOW_SIZE)
+    r, c = np.meshgrid(r, c)
+    r_count = r.ravel().shape[0]
+    for time in unique_time:
+        new_tdf = test_files_df[test_files_df['t'] == time].iloc[0:1, :]
+        new_tdf = pd.concat([new_tdf] * r_count, ignore_index=True)
+        new_tdf.loc[:, 'start_row'] = r.ravel()
+        new_tdf.loc[:, 'end_row'] = r.ravel() + WINDOW_SIZE
+        new_tdf.loc[:, 'start_col'] = c.ravel()
+        new_tdf.loc[:, 'end_col'] = c.ravel() + WINDOW_SIZE
+        tdf = pd.concat([tdf, new_tdf], ignore_index=True)
+    return tdf
 
 
 def data_generator(files_df_path, top_data_dir, batch_size, train_size=0.8, train=True):
     train_files, valid_files, test_files = train_test_split(files_df_path, top_data_dir, train_size)
-    train_gen = DataGenerator(train_files, parse_func, batch_size)
-    valid_gen = DataGenerator(valid_files, parse_func, batch_size)
-    test_gen = DataGenerator(test_files, parse_func, batch_size)
-
     if train:
+        train_gen = DataGenerator(train_files, parse_func, batch_size)
+        valid_gen = DataGenerator(valid_files, parse_func, batch_size)
         return train_gen, valid_gen
     else:
+        test_gen = DataGenerator(test_files, parse_func, batch_size)
         return test_gen
