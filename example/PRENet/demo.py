@@ -58,13 +58,13 @@ def main():
     # 数据批
     files_df_path= '/hxqtmp/DPLearning/bupj/PRE_DL/debug/tmp/NCHN_mon_5.csv'
     top_data_dir = "/hxqtmp/DPLearning/hm/data/PRE"
-     # 模型准备
-    start_point = './data/round3/weights_05_0.019908.h5'
+    # 模型准备
+    start_point = '/hxqtmp/DPLearning/bupj/PRE_DL/debug/tmp/weights_best.h5'
     
     test_gen = data_generator(files_df_path, top_data_dir, bs, train=False)
     
     model = load_model(start_point, custom_objects={'QPELoss': QPELoss(1, name="qpe_loss")})
-    out = './data/round3/cnns_1'
+    out = '/hxqtmp/DPLearning/bupj/PRE_DL/debug/tmp/weights_best'
     os.makedirs(out, exist_ok=True)
 
     for i in tqdm.trange(len(test_gen), desc='processing'):
