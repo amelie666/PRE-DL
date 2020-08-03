@@ -85,10 +85,11 @@ class GeoTIFFReader(object):
 
 class DataGenerator(Sequence):
 
-    def __init__(self, files_df, parse_func, batch_size, shuffle=True):
+    def __init__(self, files_df, parse_func, batch_size, shuffle=True, **kwarg):
         self.files_df = files_df
         self.indexes = np.arange(len(files_df))
         self.parse_func = parse_func
+        self.kwarg = kwarg
         self.batch_size = batch_size
         self.shuffle = shuffle
 
@@ -124,9 +125,10 @@ class DataGenerator(Sequence):
         batch_indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
         x_lst, pre_lst, ppre_lst = list(), list(), list()
         for idx in batch_indexes:
-            x_lst.append(self.parse_func(self.files_df.iloc[idx, :])[0])
-            pre_lst.append(self.parse_func(self.files_df.iloc[idx, :])[1])
-            ppre_lst.append(self.parse_func(self.files_df.iloc[idx, :])[2])
+            x_l, pre_l, ppre_l = self.parse_func(self.files_df.iloc[idx, :], **self.kwarg)
+            x_lst.append(x_l)
+            pre_lst.append(pre_l)
+            ppre_lst.append(ppre_l)
 
         batch_x = np.asarray(x_lst)
         batch_pre = np.asarray(pre_lst)
@@ -212,11 +214,13 @@ def cosine_time_radians(time_str, mode):
     return np.cos(time_radians)
 
 
-def parse_func(series):
+def parse_func(series, **kwarg):
     x_tmp_lst = list()
     ppre_tmp_lst = list()
     pre_tmp_lst = list()
-
+    
+    with_t_1 = kwarg.get('with_t_1', True)
+    
     start_row = series["start_row"]
     end_row = series["end_row"]
     start_col = series["start_col"]
@@ -227,22 +231,24 @@ def parse_func(series):
         tmp_data = past_h5_reader.read(b_name)[start_row:end_row, start_col:end_col]
         x_tmp_lst.extend([normalization(tmp_data, "H8")])
 
-    past_pre = GeoTIFFReader(series["t-10_pre"]).read()[start_row:end_row, start_col:end_col]
-    x_tmp_lst.extend([normalization(past_pre, "pre")])
+    if with_t_1:
+        past_pre = GeoTIFFReader(series["t-10_pre"]).read()[start_row:end_row, start_col:end_col]
+        x_tmp_lst.extend([normalization(past_pre, "pre")])
 
-    day_time = np.zeros(past_pre.shape)
+    day_time = np.zeros(tmp_data.shape)
     day_time[:, :] = cosine_time_radians(series["t"], "day_time")
     x_tmp_lst.extend([day_time])
 
-    year_time = np.zeros(past_pre.shape)
+    year_time = np.zeros(tmp_data.shape)
     year_time[:, :] = cosine_time_radians(series["t"], "year_time")
     x_tmp_lst.extend([year_time])
 
-    x_tmp_lst.extend(
-        [
-            normalization(GeoTIFFReader(series["t-10_loc"]).read()[start_row:end_row, start_col:end_col], "loc")
-        ]
-    )
+    if with_t_1:
+        x_tmp_lst.extend(
+            [
+                normalization(GeoTIFFReader(series["t-10_loc"]).read()[start_row:end_row, start_col:end_col], "loc")
+            ]
+        )
 
     cur_h5_reader = H5BasicReader(series["t_H8"])
     for b_name in H8_BANDS:
@@ -322,12 +328,12 @@ def convert_test_df_for_demo(test_files_df):
     return tdf
 
 
-def data_generator(files_df_path, top_data_dir, batch_size, train_size=0.8, train=True):
+def data_generator(files_df_path, top_data_dir, batch_size, train_size=0.8, train=True, with_t_1=True):
     train_files, valid_files, test_files = train_test_split(files_df_path, top_data_dir, train_size)
     if train:
-        train_gen = DataGenerator(train_files, parse_func, batch_size)
-        valid_gen = DataGenerator(valid_files, parse_func, batch_size)
+        train_gen = DataGenerator(train_files, parse_func, batch_size, with_t_1=with_t_1)
+        valid_gen = DataGenerator(valid_files, parse_func, batch_size, with_t_1=with_t_1)
         return train_gen, valid_gen
     else:
-        test_gen = DataGenerator(test_files, parse_func, batch_size)
+        test_gen = DataGenerator(test_files, parse_func, batch_size, with_t_1=with_t_1)
         return test_gen
