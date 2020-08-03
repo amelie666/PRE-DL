@@ -72,9 +72,9 @@ class RainGaugeColorMap(ColorMap):
 class RainGaugeDiffColorMap(ColorMap):
     def _init_color(self):
         c1 = ColorValue('BG', (1, 1, 1, 0), 0)
-        c2 = ColorValue('FN RG', (0, 1, 0, 1), 1)  # t_y == 0, p_y == 0
-        c3 = ColorValue('FP RG', (1, 1, 0, 1), 2)  # t_y == 1, p_y == 0
-        c4 = ColorValue('TN RG', (1, 0, 1, 1), 3)  # t_y == 0, p_y == 1
+        c2 = ColorValue('TN RG', (0, 1, 0, 1), 1)  # t_y == 0, p_y == 0
+        c3 = ColorValue('FN RG', (1, 0, 1, 1), 2)  # t_y == 1, p_y == 0
+        c4 = ColorValue('FP RG', (1, 1, 0, 1), 3)  # t_y == 0, p_y == 1
         c5 = ColorValue('TP RG', (0, 0, 1, 1), 4)  # t_y == 1, p_y == 1
         self.cs = [c1, c2, c3, c4, c5]
         self.cs.sort(key=lambda x: x.value)

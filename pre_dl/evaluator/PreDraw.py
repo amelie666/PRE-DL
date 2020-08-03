@@ -1,5 +1,7 @@
 from pre_dl.evaluator.colormaps import RainGaugeColorMap, RainGaugeDiffColorMap, RainColorMap, RainDiffColorMap
 
+import datetime
+
 import numpy as np
 import rasterio as rio
 import geopandas as gpd
@@ -8,6 +10,7 @@ from matplotlib import pyplot as plt
 
 
 class PreDraw(object):
+    time: datetime.datetime
 
     def __init__(self, crs, extent, res):
         super(PreDraw, self).__init__()
@@ -16,6 +19,9 @@ class PreDraw(object):
         self.res = res
         self.shape = (int((self.extent[1] - self.extent[0]) / res),
                       int((self.extent[3] - self.extent[2]) / res))
+
+    def set_time(self, time):
+        self.time = time
 
     def plot(self):
         fig = plt.figure(figsize=[8, 8])
@@ -102,6 +108,7 @@ class PreDraw(object):
         diff[np.logical_and(t_y == 1, p_y == 0)] = 2
         diff[np.logical_and(t_y == 0, p_y == 1)] = 3
         diff[np.logical_and(t_y == 1, p_y == 1)] = 4
+        iou = diff[diff == 4].sum() / (diff[diff > 1].sum() + 1e-5)
         diff[np.logical_and(diff == 1, l_y == 0)] = 0  # set no rain gauge
         ax_img = main_ax.imshow(diff,
                                 transform=self.crs,
@@ -110,29 +117,30 @@ class PreDraw(object):
                                 origin='upper',
                                 **kwargs)
         color_ax.tick_params(labelsize=8)
-        main_ax.set_title('Rain Gauge Diff')
+        main_ax.set_title('%s Rain Gauge Diff, iou: %.3f' % (str(self.time), iou))
         return main_ax
 
     def evaluate_precipitation(self, true_rain_tif,
                                prediction_rain_tif,
                                fig, main_ax, **kwargs):
         color_ax = fig.add_axes([0.93, 0.15, 0.01, 0.7])
-        cmc = RainDiffColorMap()
-        color_ax = cmc.plot(color_ax)
-        kwargs.update({'cmap': cmc.cmap, 'vmax': cmc.vmax, 'vmin': cmc.vmin})
+        # cmc = RainDiffColorMap()
+        # color_ax = cmc.plot(color_ax)
+        # kwargs.update({'cmap': cmc.cmap, 'vmax': cmc.vmax, 'vmin': cmc.vmin})
         with rio.open(true_rain_tif) as f:
             t_y = f.read(1)
         with rio.open(prediction_rain_tif) as f:
             p_y = f.read(1)
-        diff = np.abs(t_y - p_y)
+        diff = t_y - p_y
         no_rain_idx = np.logical_and(t_y == 0, p_y == 0)
-        diff[no_rain_idx] = -1
+        diff = np.ma.masked_array(diff, no_rain_idx)
         ax_img = main_ax.imshow(diff,
                                 transform=self.crs,
                                 extent=(f.bounds.left, f.bounds.right, f.bounds.bottom, f.bounds.top),
                                 zorder=2,
                                 origin='upper',
                                 **kwargs)
+        fig.colorbar(ax_img, color_ax)
         color_ax.tick_params(labelsize=8)
         main_ax.set_title('Rain Gauge Diff')
         return main_ax
