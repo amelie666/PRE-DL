@@ -1,6 +1,6 @@
 class CalculateClassification(object):
 
-    def __init__(self, tn, fp, fn, tp):
+    def __init__(self, tn, fp, fn, tp, eps=1e-6):
         """
         :param tp: the number of true positives
         :param tn: the number of true negatives
@@ -11,33 +11,25 @@ class CalculateClassification(object):
         self.fp = fp
         self.fn = fn
         self.tp = tp
+        self.eps = eps
 
     def calculate_pod(self):
         """
         :return: 检测率Probability Of Detection (POD)
         """
-        if self.tp + self.fn == 0.0:
-            return 0.0
-        else:
-            return self.tp / (self.tp + self.fn)
+        return (self.tp + self.eps) / (self.tp + self.fn + self.eps)
 
     def calculate_far(self):
         """
         :return: False Alarm Rate 误报率
         """
-        if self.fp + self.tp == 0.0:
-            return 0.0
-        else:
-            return self.fp / (self.fp + self.tp)
+        return (self.fp + self.eps) / (self.fp + self.tp + self.eps)
 
     def calculate_pofd(self):
         """
         :return: Probability of False Detection 误报概率
         """
-        if self.fp + self.tn == 0:
-            return 0.0
-        else:
-            return self.fp / (self.fp + self.tn)
+        return (self.fp + self.eps) / (self.fp + self.tn + self.eps)
 
     def calculate_acc(self):
         """
@@ -63,7 +55,7 @@ class CalculateClassification(object):
         :return:  海德克技能分数Heidke Skill Score (HSS
         """
         return (self.tp + self.fp) * (self.tp + self.fn) * (self.tn + self.fp) * (self.tn + self.fn) / (
-                self.tp + self.fp + self.tn + self.fn)
+            self.tp + self.fp + self.tn + self.fn)
 
     def calculate_hkd(self):
         """
@@ -84,7 +76,7 @@ class CalculateClassification(object):
         else:
             P = self.tp / (self.tp + self.tn)
             R = self.tp / (self.tp + self.fn)
-            return 2 * P * R / (P + R + 0.000001)
+            return 2 * P * R / (P + R + self.eps)
 
     def calculate_iou(self):
         iou = self.tp / (self.tp + self.fn + self.fp)

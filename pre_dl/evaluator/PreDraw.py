@@ -23,6 +23,10 @@ class PreDraw(object):
     def set_time(self, time):
         self.time = time
 
+    @property
+    def time_str(self):
+        return str(self.time)
+
     def plot(self):
         fig = plt.figure(figsize=[8, 8])
         ax = fig.add_subplot(1, 1, 1,
@@ -65,14 +69,14 @@ class PreDraw(object):
         color_ax = fig.add_axes([0.93, 0.15, 0.01, 0.7])
         color_ax = cmc.plot(color_ax)
         color_ax.tick_params(labelsize=8)
-        main_ax.set_title('Rain Gauge')
+        main_ax.set_title('%s Rain Gauge' % self.time_str)
         return main_ax
 
     def draw_precipitation(self, pre_tif, fig, main_ax, **kwargs):
         color_ax = fig.add_axes([0.93, 0.15, 0.01, 0.7])
-        cmc = RainColorMap()
-        color_ax = cmc.plot(color_ax)
-        kwargs.update({'cmap': cmc.cmap, 'vmax': cmc.vmax, 'vmin': cmc.vmin})
+        # cmc = RainColorMap()
+        # color_ax = cmc.plot(color_ax)
+        # kwargs.update({'cmap': cmc.cmap, 'vmax': cmc.vmax, 'vmin': cmc.vmin})
         with rio.open(pre_tif) as f:
             img = f.read(1)
         ax_img = main_ax.imshow(img,
@@ -81,8 +85,9 @@ class PreDraw(object):
                                 zorder=2,
                                 origin='upper',
                                 **kwargs)
+        fig.colorbar(ax_img, color_ax)
         color_ax.tick_params(labelsize=8)
-        main_ax.set_title('Precipitation')
+        main_ax.set_title('%s Precipitation' % self.time_str)
         return main_ax
 
     def evaluate_rain_gauge(self, true_rain_tif,
@@ -104,10 +109,10 @@ class PreDraw(object):
             p_y[p_y > threshold] = 1
             p_y[p_y <= threshold] = 0
         diff = np.zeros_like(t_y, dtype=np.uint8)
-        diff[np.logical_and(t_y == 0, p_y == 0)] = 1
-        diff[np.logical_and(t_y == 1, p_y == 0)] = 2
-        diff[np.logical_and(t_y == 0, p_y == 1)] = 3
-        diff[np.logical_and(t_y == 1, p_y == 1)] = 4
+        diff[np.logical_and(t_y == 0, p_y == 0)] = 1  # tn
+        diff[np.logical_and(t_y == 1, p_y == 0)] = 2  # fp
+        diff[np.logical_and(t_y == 0, p_y == 1)] = 3  # fn
+        diff[np.logical_and(t_y == 1, p_y == 1)] = 4  # tp
         iou = diff[diff == 4].sum() / (diff[diff > 1].sum() + 1e-5)
         diff[np.logical_and(diff == 1, l_y == 0)] = 0  # set no rain gauge
         ax_img = main_ax.imshow(diff,
@@ -117,7 +122,7 @@ class PreDraw(object):
                                 origin='upper',
                                 **kwargs)
         color_ax.tick_params(labelsize=8)
-        main_ax.set_title('%s Rain Gauge Diff, iou: %.3f' % (str(self.time), iou))
+        main_ax.set_title('%s Rain Gauge Diff, iou: %.3f' % (self.time_str, iou))
         return main_ax
 
     def evaluate_precipitation(self, true_rain_tif,
@@ -133,7 +138,8 @@ class PreDraw(object):
             p_y = f.read(1)
         diff = t_y - p_y
         no_rain_idx = np.logical_and(t_y == 0, p_y == 0)
-        diff = np.ma.masked_array(diff, no_rain_idx)
+        # diff = np.ma.masked_array(diff, no_rain_idx)
+        mae = np.mean(np.abs(diff[~no_rain_idx]))
         ax_img = main_ax.imshow(diff,
                                 transform=self.crs,
                                 extent=(f.bounds.left, f.bounds.right, f.bounds.bottom, f.bounds.top),
@@ -142,7 +148,7 @@ class PreDraw(object):
                                 **kwargs)
         fig.colorbar(ax_img, color_ax)
         color_ax.tick_params(labelsize=8)
-        main_ax.set_title('Rain Gauge Diff')
+        main_ax.set_title('%s  Precipitation Diff (T-P) mae:%.3f' % (self.time_str, mae))
         return main_ax
 
     def decorate(self, ax):
