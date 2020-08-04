@@ -61,7 +61,7 @@ def main():
     # 模型准备
     start_point = '/hxqtmp/DPLearning/bupj/PRE_DL/debug/tmp/weights_best.h5'
     
-    test_gen = data_generator(files_df_path, top_data_dir, bs, train=False)
+    test_gen = data_generator(files_df_path, top_data_dir, bs, train=False, with_t_1=False)
     
     model = load_model(start_point, custom_objects={'QPELoss': QPELoss(1, name="qpe_loss")})
     out = '/hxqtmp/DPLearning/bupj/PRE_DL/debug/tmp/weights_best'
