@@ -20,49 +20,50 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # The GPU id to use, usually either "0" or "1";
-os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID";
-os.environ["CUDA_VISIBLE_DEVICES"]="0"; 
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID";
+os.environ["CUDA_VISIBLE_DEVICES"] = "0";
 
 
 def evaluate_per(ppre, pre, out, time, rows, cols):
     ppre_file = os.path.join(out, '%s_ppre.tif' % time)
     mode = 'r+' if os.path.exists(ppre_file) else 'w'
     with rio.open(
-            ppre_file,
-            mode,
-            driver='GTiff',
-            height=STUDY_AREA_SHAPE[0],
-            width=STUDY_AREA_SHAPE[1],
-            count=1,
-            dtype=ppre.dtype,
-            crs='+proj=aea +lat_1=29.5 +lat_2=45.5 +lon_0=116 +datum=WGS84 +units=m',
-            transform=rio.transform.Affine.from_gdal(-360822.062, 2000, 0.0, 4485438.524, 0.0, -2000),
+        ppre_file,
+        mode,
+        driver='GTiff',
+        height=STUDY_AREA_SHAPE[0],
+        width=STUDY_AREA_SHAPE[1],
+        count=1,
+        dtype=ppre.dtype,
+        crs='+proj=aea +lat_1=29.5 +lat_2=45.5 +lon_0=116 +datum=WGS84 +units=m',
+        transform=rio.transform.Affine.from_gdal(-360822.062, 2000, 0.0, 4485438.524, 0.0, -2000),
     ) as dst:
-        dst.write(ppre, window=Window(cols[0], rows[0], cols[1]-cols[0], rows[1]-rows[0]), indexes=1)
+        dst.write(ppre, window=Window(cols[0], rows[0], cols[1] - cols[0], rows[1] - rows[0]), indexes=1)
     with rio.open(
-            os.path.join(out, '%s_pre.tif' % time),
-            mode,
-            driver='GTiff',
-            height=STUDY_AREA_SHAPE[0],
-            width=STUDY_AREA_SHAPE[1],
-            count=1,
-            dtype=pre.dtype,
-            crs='+proj=aea +lat_1=29.5 +lat_2=45.5 +lon_0=116 +datum=WGS84 +units=m',
-            transform=rio.transform.Affine.from_gdal(-360822.062, 2000, 0.0, 4485438.524, 0.0, -2000),
+        os.path.join(out, '%s_pre.tif' % time),
+        mode,
+        driver='GTiff',
+        height=STUDY_AREA_SHAPE[0],
+        width=STUDY_AREA_SHAPE[1],
+        count=1,
+        dtype=pre.dtype,
+        crs='+proj=aea +lat_1=29.5 +lat_2=45.5 +lon_0=116 +datum=WGS84 +units=m',
+        transform=rio.transform.Affine.from_gdal(-360822.062, 2000, 0.0, 4485438.524, 0.0, -2000),
     ) as dst:
-        dst.write(pre, window=Window(cols[0], rows[0], cols[1]-cols[0], rows[1]-rows[0]), indexes=1)
-        
-def main():    
+        dst.write(pre, window=Window(cols[0], rows[0], cols[1] - cols[0], rows[1] - rows[0]), indexes=1)
+
+
+def main():
     # 参数
     bs = 1
     # 数据批
-    files_df_path= '/hxqtmp/DPLearning/bupj/PRE_DL/debug/tmp/NCHN_mon_5.csv'
+    files_df_path = '/hxqtmp/DPLearning/bupj/PRE_DL/debug/tmp/NCHN_mon_5.csv'
     top_data_dir = "/hxqtmp/DPLearning/hm/data/PRE"
     # 模型准备
     start_point = '/hxqtmp/DPLearning/bupj/PRE_DL/debug/tmp/weights_best.h5'
-    
-    test_gen = data_generator(files_df_path, top_data_dir, bs, train=False, with_t_1=False)
-    
+
+    test_gen = data_generator(files_df_path, top_data_dir, bs, train=False, with_t_1=False, p_step=(32, 32))
+
     model = load_model(start_point, custom_objects={'QPELoss': QPELoss(1, name="qpe_loss")})
     out = '/hxqtmp/DPLearning/bupj/PRE_DL/debug/tmp/weights_best'
     os.makedirs(out, exist_ok=True)
@@ -73,9 +74,8 @@ def main():
         cols = test_gen.get_col(i)[0]
         x, y = test_gen[i]
         ppre, pre, qe_loss = model.predict(x)
-        ppre, pre = np.squeeze(ppre),  np.squeeze(pre)
-        evaluate_per(ppre, pre, out ,time, rows, cols)
-
+        ppre, pre = np.squeeze(ppre), np.squeeze(pre)
+        evaluate_per(ppre, pre, out, time, rows, cols)
 
 
 if __name__ == "__main__":
