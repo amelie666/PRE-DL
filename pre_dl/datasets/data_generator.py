@@ -4,8 +4,7 @@ import glob
 import calendar
 import datetime
 import warnings
-
-warnings.filterwarnings("ignore")
+from collections import defaultdict
 
 import h5py
 import gdal
@@ -13,6 +12,8 @@ import tqdm
 import numpy as np
 import pandas as pd
 from tensorflow.keras.utils import Sequence
+
+warnings.filterwarnings("ignore")
 
 VALID_RANGE = {
     "H8": [0, 335],
@@ -83,13 +84,14 @@ class GeoTIFFReader(object):
 
 class DataGenerator(Sequence):
 
-    def __init__(self, files_df, parse_func, batch_size, shuffle=True, **kwarg):
+    def __init__(self, files_df, parse_func, batch_size, shuffle=True, data_list_preprocess=None, **kwarg):
         self.files_df = files_df
         self.indexes = np.arange(len(files_df))
         self.parse_func = parse_func
-        self.kwarg = kwarg
         self.batch_size = batch_size
         self.shuffle = shuffle
+        self.data_list_preprocess = data_list_preprocess
+        self.kwarg = kwarg
 
     def on_epoch_end(self):
         if self.shuffle:
@@ -121,19 +123,15 @@ class DataGenerator(Sequence):
 
     def __getitem__(self, index):
         batch_indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
-        x_lst, pre_lst, ppre_lst = list(), list(), list()
+        data_list = []
         for idx in batch_indexes:
-            x_l, pre_l, ppre_l = self.parse_func(self.files_df.iloc[idx, :], **self.kwarg)
-            x_lst.append(x_l)
-            pre_lst.append(pre_l)
-            ppre_lst.append(ppre_l)
-
-        batch_x = np.asarray(x_lst)
-        batch_pre = np.asarray(pre_lst)
-        batch_ppre = np.asarray(ppre_lst)
-
-        return {"main_input": batch_x, "gt_ppre": batch_ppre, "gt_pre": batch_pre}, \
-               {"ppre": batch_ppre, "pre": batch_pre}
+            data = self.parse_func(self.files_df.iloc[idx, :], **self.kwarg)
+            data_list.append(data)
+        if self.data_list_preprocess:
+            out_put = self.data_list_preprocess(data_list)
+            return out_put
+        else:
+            return data_list
 
 
 def get_items(file_dir):
@@ -179,10 +177,10 @@ def get_items(file_dir):
                                               "{}_Location.tif".format(yyyymmdd + str(int(hhmm) + 10))),
                         "t_dem": os.path.join(file_dir, "DEM", "DEM_H8.tif"),
                         "t_pre": os.path.join(file_dir, "Pre", "{}_Pre.tif".format(yyyymmdd + str(int(hhmm) + 10))),
-                        "start_row": row - int(WINDOW_SIZE / 2),
-                        "end_row": row + int(WINDOW_SIZE / 2),
-                        "start_col": col - int(WINDOW_SIZE / 2),
-                        "end_col": col + int(WINDOW_SIZE / 2)
+                        "start_row": row_start_index,
+                        "end_row": row_end_index,
+                        "start_col": col_start_index,
+                        "end_col": col_end_index,
                     },
                     index=[0]
                 )
@@ -215,9 +213,7 @@ def cosine_time_radians(time_str, mode):
 
 
 def parse_func(series, **kwarg):
-    x_tmp_lst = list()
-    ppre_tmp_lst = list()
-    pre_tmp_lst = list()
+    data_dict = defaultdict(list)
 
     with_t_1 = kwarg.get('with_t_1', True)
 
@@ -229,22 +225,22 @@ def parse_func(series, **kwarg):
     past_h5_reader = H5BasicReader(series["t-10_H8"])
     for b_name in H8_BANDS:
         tmp_data = past_h5_reader.read(b_name)[start_row:end_row, start_col:end_col]
-        x_tmp_lst.extend([normalization(tmp_data, "H8")])
+        data_dict['t-10_H8'].append([normalization(tmp_data, "H8")])
 
     if with_t_1:
         past_pre = GeoTIFFReader(series["t-10_pre"]).read()[start_row:end_row, start_col:end_col]
-        x_tmp_lst.extend([normalization(past_pre, "pre")])
+        data_dict['t-10_pre'].append([normalization(past_pre, "pre")])
 
     day_time = np.zeros(tmp_data.shape)
     day_time[:, :] = cosine_time_radians(series["t"], "day_time")
-    x_tmp_lst.extend([day_time])
+    data_dict['day_time'].append([day_time])
 
     year_time = np.zeros(tmp_data.shape)
     year_time[:, :] = cosine_time_radians(series["t"], "year_time")
-    x_tmp_lst.extend([year_time])
+    data_dict['year_time'].append([year_time])
 
     if with_t_1:
-        x_tmp_lst.extend(
+        data_dict['t-10_loc'].append(
             [
                 normalization(GeoTIFFReader(series["t-10_loc"]).read()[start_row:end_row, start_col:end_col], "loc")
             ]
@@ -253,31 +249,19 @@ def parse_func(series, **kwarg):
     cur_h5_reader = H5BasicReader(series["t_H8"])
     for b_name in H8_BANDS:
         tmp_data = cur_h5_reader.read(b_name)[start_row:end_row, start_col:end_col]
-        x_tmp_lst.extend([normalization(tmp_data, "H8")])
+        data_dict['H8'].append([normalization(tmp_data, "H8")])
 
-    x_tmp_lst.extend(
+    data_dict['t_dem'].append(
         [
             normalization(GeoTIFFReader(series["t_dem"]).read()[start_row:end_row, start_col:end_col], "dem")
         ]
     )
 
     pre = GeoTIFFReader(series["t_pre"]).read()[start_row:end_row, start_col:end_col]
-    ppre = np.zeros((pre.shape[0], pre.shape[1]))
-    pre_tmp_lst.extend([normalization(pre, "pre")])
-    ppre[np.where(pre > 0)] = 1
-    ppre_tmp_lst.extend([ppre])
+    data_dict['pre'].append([normalization(pre, "pre")])
+    return data_dict
 
-    x_arr = np.asarray(x_tmp_lst)
-    x_arr = np.transpose(x_arr, [1, 2, 0])
-    pre_arr = np.asarray(pre_tmp_lst)
-    pre_arr = np.transpose(pre_arr, [1, 2, 0])
-    ppre_arr = np.asarray(ppre_tmp_lst)
-    ppre_arr = np.transpose(ppre_arr, [1, 2, 0])
-
-    return x_arr, pre_arr, ppre_arr
-
-
-def train_test_split(files_df_path, top_data_dir, train_size=0.8, p_step=(1, 1)):
+def train_test_split(files_df_path, top_data_dir, train_size=(0.8, 0.1, 0.1), train=True, p_step=(1, 1)):
     if os.path.exists(files_df_path):
         files_df = pd.read_csv(files_df_path)
     else:
@@ -286,8 +270,8 @@ def train_test_split(files_df_path, top_data_dir, train_size=0.8, p_step=(1, 1))
 
     unique_time = files_df["t"].unique()
     lens = len(unique_time)
-    train_lens = int(np.ceil(lens * train_size))
-    valid_lens = int(np.ceil((lens - train_lens) / 2))
+    train_lens = int(np.ceil(lens * train_size[0]))
+    valid_lens = int(np.ceil((lens * train_size[1])))
 
     train_time = unique_time[:train_lens]
     valid_time = unique_time[train_lens:train_lens + valid_lens]
@@ -295,11 +279,12 @@ def train_test_split(files_df_path, top_data_dir, train_size=0.8, p_step=(1, 1))
 
     train_files_df = files_df[files_df["t"].isin(train_time)]
     valid_files_df = files_df[files_df["t"].isin(valid_time)]
-    test_files_df = files_df[files_df["t"].isin(test_time)]
-
-    test_files_df = convert_test_df_for_demo(test_files_df, p_step)
-
-    return train_files_df, valid_files_df, test_files_df
+    if train:
+        return train_files_df, valid_files_df
+    else:
+        test_files_df = files_df[files_df["t"].isin(test_time)]
+        test_files_df = convert_test_df_for_demo(test_files_df, p_step)
+        return test_files_df
 
 
 def convert_test_df_for_demo(test_files_df, p_step):
@@ -317,7 +302,7 @@ def convert_test_df_for_demo(test_files_df, p_step):
     c = np.clip(c, 0, STUDY_AREA_SHAPE[1] - p_step[1])
     r, c = np.meshgrid(r, c)
     r_count = r.ravel().shape[0]
-    for time in unique_time:
+    for time in tqdm.tqdm(unique_time, desc='prepare test df:'):
         new_tdf = test_files_df[test_files_df['t'] == time].iloc[0:1, :]
         new_tdf = pd.concat([new_tdf] * r_count, ignore_index=True)
         new_tdf.loc[:, 'start_row'] = r.ravel()
@@ -329,12 +314,13 @@ def convert_test_df_for_demo(test_files_df, p_step):
 
 
 def data_generator(files_df_path, top_data_dir, batch_size,
-                   train_size=0.8, train=True, with_t_1=True, p_step=(1, 1)):
-    train_files, valid_files, test_files = train_test_split(files_df_path, top_data_dir, train_size)
+                   train_size=(0.8, 0.1, 0.1), train=True, with_t_1=True, p_step=(1, 1)):
     if train:
-        train_gen = DataGenerator(train_files, parse_func, batch_size, with_t_1=with_t_1)
-        valid_gen = DataGenerator(valid_files, parse_func, batch_size, with_t_1=with_t_1)
+        train_df, valid_df = train_test_split(files_df_path, top_data_dir, train_size, train=train)
+        train_gen = DataGenerator(train_df, parse_func, batch_size, with_t_1=with_t_1)
+        valid_gen = DataGenerator(valid_df, parse_func, batch_size, with_t_1=with_t_1)
         return train_gen, valid_gen
     else:
-        test_gen = DataGenerator(test_files, parse_func, batch_size, with_t_1=with_t_1, p_step=p_step)
+        test_df = train_test_split(files_df_path, top_data_dir, train_size, train=train)
+        test_gen = DataGenerator(test_df, parse_func, batch_size, with_t_1=with_t_1, p_step=p_step)
         return test_gen
