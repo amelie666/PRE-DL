@@ -9,6 +9,7 @@ warnings.filterwarnings("ignore")
 
 import h5py
 import gdal
+import tqdm
 import numpy as np
 import pandas as pd
 from tensorflow.keras.utils import Sequence
@@ -26,7 +27,7 @@ RG_BANDS = ["V13392_010", ]
 
 STUDY_AREA_SHAPE = [344, 360]
 
-WINDOW_SIZE = 32
+WINDOW_SIZE = 9
 
 
 class H5BasicReader(object):
@@ -146,7 +147,7 @@ def get_items(file_dir):
         ]
     )
 
-    for f in sorted(glob.glob(os.path.join(file_dir, "H8", "*.HDF"))):
+    for f in tqdm.tqdm(sorted(glob.glob(os.path.join(file_dir, "H8", "*.HDF"))), desc='Generate DataFrame:'):
         yyyymmdd, hhmm = os.path.basename(f).split("_")[2:4]
         next_ten_h8 = os.path.join(file_dir, "H8", "Himawari8_OBI_{}_{}_PRJ3.HDF".format(yyyymmdd, int(hhmm) + 10))
         if os.path.exists(next_ten_h8):
@@ -160,12 +161,14 @@ def get_items(file_dir):
             for row in target_df.itertuples():
                 col = getattr(row, "v_i")
                 row = getattr(row, "u_i")
+                
+                row_start_index = row - int(WINDOW_SIZE / 2)
+                row_end_index = row_start_index + WINDOW_SIZE
+                
+                col_start_index = col - int(WINDOW_SIZE / 2)
+                col_end_index = col_start_index + WINDOW_SIZE
 
-                if (row - int(WINDOW_SIZE / 2)) < 0 or (col - int(WINDOW_SIZE / 2)) < 0:
-                    continue
-
-                if (row + int(WINDOW_SIZE / 2)) > STUDY_AREA_SHAPE[0] or (col + int(WINDOW_SIZE / 2)) > \
-                    STUDY_AREA_SHAPE[1]:
+                if row_start_index < 0 or col_start_index < 0 or row_end_index > STUDY_AREA_SHAPE[0] or col_end_index > STUDY_AREA_SHAPE[1]:
                     continue
 
                 new_df = pd.DataFrame(
@@ -282,6 +285,7 @@ def train_test_split(files_df_path, top_data_dir, train_size=0.8):
         files_df = pd.read_csv(files_df_path)
     else:
         files_df = get_items(top_data_dir)
+        files_df.to_csv(files_df_path, index=False)
 
     unique_time = files_df["t"].unique()
     lens = len(unique_time)

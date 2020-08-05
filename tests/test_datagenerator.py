@@ -8,7 +8,7 @@ class TestDatasets(unittest.TestCase):
     
     def test_data_generator_train_val(self):
         bs = 1
-        files_df_path= '/hxqtmp/DPLearning/bupj/PRE_DL/debug/tmp/NCHN_mon_5.csv'
+        files_df_path= './data/round4/9x9_patchs.csv'
         top_data_dir = "/hxqtmp/DPLearning/hm/data/PRE"
         train_gen, valid_gen = data_generator(files_df_path, top_data_dir, bs)
         x,  y = train_gen[0]
@@ -29,7 +29,7 @@ class TestDatasets(unittest.TestCase):
             
     def test_data_generator_test(self):
         bs = 1
-        files_df_path= '/hxqtmp/DPLearning/bupj/PRE_DL/debug/tmp/NCHN_mon_5.csv'
+        files_df_path= './data/round4/9x9_patchs.csv'
         top_data_dir = "/hxqtmp/DPLearning/hm/data/PRE"
         test_gen = data_generator(files_df_path, top_data_dir, bs, train=False)
         x,  y = test_gen[0]
