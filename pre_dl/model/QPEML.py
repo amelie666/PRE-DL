@@ -11,6 +11,10 @@ class QPELR(object):
 
     def fit(self, x, y):
         self._clf.fit(x, y)
+        
+    def load_model(self, file_path):
+        self._clf = joblib.load(file_path)
+        return self
 
     def save_model(self, filepath):
         dir_path = os.path.dirname(filepath)
