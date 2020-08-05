@@ -14,7 +14,6 @@ import numpy as np
 import pandas as pd
 from tensorflow.keras.utils import Sequence
 
-
 VALID_RANGE = {
     "H8": [0, 335],
     "loc": [0, 1],
@@ -68,13 +67,11 @@ class GeoTIFFReader(object):
         self.ProjectionInfo = dataset.GetProjection()
 
     def read(self, ):
-
         dataset = gdal.Open(self.in_file)
         data = dataset.ReadAsArray(0, 0, self.XSize, self.YSize)
         return data
 
     def get_lon_lat(self, ):
-
         gtf = self.GeoTransform
         x_range = range(0, self.XSize)
         y_range = range(0, self.YSize)
@@ -112,14 +109,14 @@ class DataGenerator(Sequence):
         batch_indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
         row_list = list()
         for idx in batch_indexes:
-            row_list.append(self.files_df.loc[idx, ['start_row','end_row']])
+            row_list.append(self.files_df.loc[idx, ['start_row', 'end_row']])
         return row_list
 
     def get_col(self, index):
         batch_indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
         col_list = list()
         for idx in batch_indexes:
-            col_list.append(self.files_df.loc[idx, ['start_col','end_col']])
+            col_list.append(self.files_df.loc[idx, ['start_col', 'end_col']])
         return col_list
 
     def __getitem__(self, index):
@@ -161,10 +158,10 @@ def get_items(file_dir):
             for row in target_df.itertuples():
                 col = getattr(row, "v_i")
                 row = getattr(row, "u_i")
-                
+
                 row_start_index = row - int(WINDOW_SIZE / 2)
                 row_end_index = row_start_index + WINDOW_SIZE
-                
+
                 col_start_index = col - int(WINDOW_SIZE / 2)
                 col_end_index = col_start_index + WINDOW_SIZE
 
@@ -221,9 +218,9 @@ def parse_func(series, **kwarg):
     x_tmp_lst = list()
     ppre_tmp_lst = list()
     pre_tmp_lst = list()
-    
+
     with_t_1 = kwarg.get('with_t_1', True)
-    
+
     start_row = series["start_row"]
     end_row = series["end_row"]
     start_col = series["start_col"]
@@ -280,7 +277,7 @@ def parse_func(series, **kwarg):
     return x_arr, pre_arr, ppre_arr
 
 
-def train_test_split(files_df_path, top_data_dir, train_size=0.8):
+def train_test_split(files_df_path, top_data_dir, train_size=0.8, p_step=(1, 1)):
     if os.path.exists(files_df_path):
         files_df = pd.read_csv(files_df_path)
     else:
@@ -300,13 +297,12 @@ def train_test_split(files_df_path, top_data_dir, train_size=0.8):
     valid_files_df = files_df[files_df["t"].isin(valid_time)]
     test_files_df = files_df[files_df["t"].isin(test_time)]
 
-    test_files_df = convert_test_df_for_demo(test_files_df)
+    test_files_df = convert_test_df_for_demo(test_files_df, p_step)
 
     return train_files_df, valid_files_df, test_files_df
 
 
-def convert_test_df_for_demo(test_files_df):
-    p_step = (32, 32)
+def convert_test_df_for_demo(test_files_df, p_step):
     unique_time = test_files_df["t"].unique()
     tdf = pd.DataFrame(
         columns=[
@@ -315,10 +311,10 @@ def convert_test_df_for_demo(test_files_df):
         ]
     )
 
-    r = np.arange(0, STUDY_AREA_SHAPE[0], WINDOW_SIZE)
-    r = np.clip(r, 0, STUDY_AREA_SHAPE[0] - WINDOW_SIZE)
-    c = np.arange(0, STUDY_AREA_SHAPE[1], WINDOW_SIZE)
-    c = np.clip(c, 0, STUDY_AREA_SHAPE[1] - WINDOW_SIZE)
+    r = np.arange(0, STUDY_AREA_SHAPE[0], p_step[0])
+    r = np.clip(r, 0, STUDY_AREA_SHAPE[0] - p_step[0])
+    c = np.arange(0, STUDY_AREA_SHAPE[1], p_step[1])
+    c = np.clip(c, 0, STUDY_AREA_SHAPE[1] - p_step[1])
     r, c = np.meshgrid(r, c)
     r_count = r.ravel().shape[0]
     for time in unique_time:
@@ -332,12 +328,13 @@ def convert_test_df_for_demo(test_files_df):
     return tdf
 
 
-def data_generator(files_df_path, top_data_dir, batch_size, train_size=0.8, train=True, with_t_1=True):
+def data_generator(files_df_path, top_data_dir, batch_size,
+                   train_size=0.8, train=True, with_t_1=True, p_step=(1, 1)):
     train_files, valid_files, test_files = train_test_split(files_df_path, top_data_dir, train_size)
     if train:
         train_gen = DataGenerator(train_files, parse_func, batch_size, with_t_1=with_t_1)
         valid_gen = DataGenerator(valid_files, parse_func, batch_size, with_t_1=with_t_1)
         return train_gen, valid_gen
     else:
-        test_gen = DataGenerator(test_files, parse_func, batch_size, with_t_1=with_t_1)
+        test_gen = DataGenerator(test_files, parse_func, batch_size, with_t_1=with_t_1, p_step=p_step)
         return test_gen

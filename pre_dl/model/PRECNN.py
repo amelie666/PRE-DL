@@ -1,6 +1,6 @@
 '''
-Descripttion: 
-version: 
+Descripttion:
+version:
 Company: http://www.shinetek.com.cn/
 Author: bupengju
 Date: 2020-08-04 13:49:49
@@ -8,6 +8,7 @@ LastEditors: bupengju
 LastEditTime: 2020-08-04 15:19:15
 '''
 import warnings
+
 warnings.filterwarnings("ignore")
 
 import numpy as np
@@ -23,7 +24,6 @@ class PRECNN(object):
         pass
 
     def _conv2d_bn(self, x, filters, num_row, num_col, padding='same', strides=(1, 1), use_bias=False):
-
         x = layers.Conv2D(filters, (num_row, num_col), strides=strides, padding=padding, use_bias=use_bias)(x)
         x = layers.BatchNormalization(scale=False)(x)
         x = layers.Activation('relu')(x)
@@ -62,6 +62,7 @@ class PRECNN(object):
 
 if __name__ == '__main__':
     import os
+
     # The GPU id to use, usually either "0" or "1";
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
