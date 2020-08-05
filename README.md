@@ -1,6 +1,8 @@
 # pre-dl
 
-implement of <Deep Learning for Precipitation Estimation from Satellite and Rain Gauges Measurements>
+> implement of Deep Learning for Precipitation Estimation from Satellite and Rain Gauges Measurements
+
+
 
 仓储信息
 --------
