@@ -1,11 +1,8 @@
 # pre-dl
 
-> implement of Deep Learning for Precipitation Estimation from Satellite and Rain Gauges Measurements
+Implement of [《Deep Learning for  Precipitation Estimation from Satellite and Rain Gauges Measurements》](https://www.mdpi.com/2072-4292/11/21/2463).
 
-
-
-仓储信息
---------
+## 仓储信息
 * Python version: python3.7.4
 * Operating System: Linux/Windows
 
